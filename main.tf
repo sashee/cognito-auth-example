@@ -11,41 +11,41 @@ resource "random_id" "id" {
 # frontend
 
 resource "aws_s3_bucket" "bucket" {
-	force_destroy = "true"
+  force_destroy = "true"
 }
 
 locals {
-	# Maps file extensions to mime types
-	# Need to add more if needed
+  # Maps file extensions to mime types
+  # Need to add more if needed
   mime_type_mappings = {
     html = "text/html",
     js   = "text/javascript",
-    mjs   = "text/javascript",
+    mjs  = "text/javascript",
     css  = "text/css"
   }
 }
 
 resource "aws_s3_bucket_object" "frontend_object" {
   for_each = fileset("${path.module}/frontend", "*")
-	key    = each.value
-	source = "${path.module}/frontend/${each.value}"
-	bucket = aws_s3_bucket.bucket.bucket
+  key      = each.value
+  source   = "${path.module}/frontend/${each.value}"
+  bucket   = aws_s3_bucket.bucket.bucket
 
-  etag         = filemd5("${path.module}/frontend/${each.value}")
-	content_type = local.mime_type_mappings[concat(regexall("\\.([^\\.]*)$", each.value), [[""]])[0][0]]
-	cache_control = "no-store, max-age=0"
+  etag          = filemd5("${path.module}/frontend/${each.value}")
+  content_type  = local.mime_type_mappings[concat(regexall("\\.([^\\.]*)$", each.value), [[""]])[0][0]]
+  cache_control = "no-store, max-age=0"
 }
 
 resource "aws_s3_bucket_object" "frontend_config" {
-	key    = "config.js"
-	content =<<EOF
+  key     = "config.js"
+  content = <<EOF
 export const cognitoLoginUrl = "https://${aws_cognito_user_pool_domain.domain.domain}.auth.${data.aws_region.current.name}.amazoncognito.com";
-export const clientId = "${aws_cognito_user_pool_client.client.id}";
+export const clientId = aws_cognito_user_pool_client.client.id;
 EOF
-	bucket = aws_s3_bucket.bucket.bucket
+  bucket  = aws_s3_bucket.bucket.bucket
 
-	content_type = "text/javascript"
-	cache_control = "no-store, max-age=0"
+  content_type  = "text/javascript"
+  cache_control = "no-store, max-age=0"
 }
 
 resource "aws_cloudfront_distribution" "distribution" {
@@ -98,7 +98,7 @@ resource "aws_cloudfront_distribution" "distribution" {
 
     forwarded_values {
       query_string = true
-			headers = ["Authorization"]
+      headers      = ["Authorization"]
       cookies {
         forward = "all"
       }
@@ -149,7 +149,7 @@ output "domain" {
 data "archive_file" "auto_confirm_lambda_code" {
   type        = "zip"
   output_path = "/tmp/${random_id.id.hex}-auto_confirm_lambda.zip"
-source {
+  source {
     content  = <<EOF
 module.exports.handler = async (event) => {
 	event.response.autoConfirmUser = true;
@@ -189,18 +189,18 @@ EOF
 }
 
 resource "aws_lambda_permission" "auto_confirm" {
-	action        = "lambda:InvokeFunction"
-	function_name = aws_lambda_function.auto_confirm.arn
-	principal     = "cognito-idp.amazonaws.com"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auto_confirm.arn
+  principal     = "cognito-idp.amazonaws.com"
 
-	source_arn = aws_cognito_user_pool.pool.arn
+  source_arn = aws_cognito_user_pool.pool.arn
 }
 
 resource "aws_cognito_user_pool" "pool" {
   name = "test-${random_id.id.hex}"
-	lambda_config {
-		pre_sign_up = aws_lambda_function.auto_confirm.arn
-	}
+  lambda_config {
+    pre_sign_up = aws_lambda_function.auto_confirm.arn
+  }
 }
 
 resource "aws_cognito_user_pool_domain" "domain" {
@@ -211,12 +211,12 @@ resource "aws_cognito_user_pool_domain" "domain" {
 resource "aws_cognito_user_pool_client" "client" {
   name = "client"
 
-  user_pool_id = aws_cognito_user_pool.pool.id
-	allowed_oauth_flows = ["code"]
-	callback_urls = ["https://${aws_cloudfront_distribution.distribution.domain_name}"]
-	allowed_oauth_scopes = ["openid"]
-	allowed_oauth_flows_user_pool_client = true
-	supported_identity_providers = ["COGNITO"]
+  user_pool_id                         = aws_cognito_user_pool.pool.id
+  allowed_oauth_flows                  = ["code"]
+  callback_urls                        = ["https://${aws_cloudfront_distribution.distribution.domain_name}"]
+  allowed_oauth_scopes                 = ["openid"]
+  allowed_oauth_flows_user_pool_client = true
+  supported_identity_providers         = ["COGNITO"]
 }
 
 data "external" "backend_build" {
@@ -230,7 +230,7 @@ EOT
 data "archive_file" "lambda_zip" {
   type        = "zip"
   output_path = "/tmp/${random_id.id.hex}-lambda.zip"
-	source_dir  = "${data.external.backend_build.working_dir}/${data.external.backend_build.result.dest}"
+  source_dir  = "${data.external.backend_build.working_dir}/${data.external.backend_build.result.dest}"
 }
 
 resource "aws_lambda_function" "backend" {
@@ -244,7 +244,7 @@ resource "aws_lambda_function" "backend" {
   role    = aws_iam_role.lambda_exec.arn
   environment {
     variables = {
-      CLIENT_ID = aws_cognito_user_pool_client.client.id
+      CLIENT_ID    = aws_cognito_user_pool_client.client.id
       USER_POOL_ID = aws_cognito_user_pool.pool.id
     }
   }
@@ -290,17 +290,17 @@ EOF
 }
 
 resource "aws_apigatewayv2_api" "api" {
-	name          = "api-${random_id.id.hex}"
-	protocol_type = "HTTP"
+  name          = "api-${random_id.id.hex}"
+  protocol_type = "HTTP"
 }
 
 resource "aws_apigatewayv2_integration" "api" {
   api_id           = aws_apigatewayv2_api.api.id
   integration_type = "AWS_PROXY"
 
-  integration_method        = "POST"
-  integration_uri           = aws_lambda_function.backend.invoke_arn
-	payload_format_version = "2.0"
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.backend.invoke_arn
+  payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "api" {
@@ -311,16 +311,16 @@ resource "aws_apigatewayv2_route" "api" {
 }
 
 resource "aws_apigatewayv2_stage" "api" {
-  api_id = aws_apigatewayv2_api.api.id
-  name   = "$default"
-	auto_deploy = true
+  api_id      = aws_apigatewayv2_api.api.id
+  name        = "$default"
+  auto_deploy = true
 }
 
 # Permission
 resource "aws_lambda_permission" "apigw" {
-	action        = "lambda:InvokeFunction"
-	function_name = aws_lambda_function.backend.arn
-	principal     = "apigateway.amazonaws.com"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.backend.arn
+  principal     = "apigateway.amazonaws.com"
 
-	source_arn = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
+  source_arn = "${aws_apigatewayv2_api.api.execution_arn}/*/*"
 }
