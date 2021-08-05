@@ -40,7 +40,7 @@ resource "aws_s3_bucket_object" "frontend_config" {
   key     = "config.js"
   content = <<EOF
 export const cognitoLoginUrl = "https://${aws_cognito_user_pool_domain.domain.domain}.auth.${data.aws_region.current.name}.amazoncognito.com";
-export const clientId = aws_cognito_user_pool_client.client.id;
+export const clientId = "${aws_cognito_user_pool_client.client.id}";
 EOF
   bucket  = aws_s3_bucket.bucket.bucket
 

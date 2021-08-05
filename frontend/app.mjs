@@ -1,7 +1,33 @@
 import {cognitoLoginUrl, clientId} from "./config.js";
 
+const sha256 = async (str) => {
+	return await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+};
+
+const generateNonce = async () => {
+	const hash = await sha256(crypto.getRandomValues(new Uint32Array(4)).toString());
+	// https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest
+	const hashArray = Array.from(new Uint8Array(hash));
+	return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+};
+
+const base64URLEncode = (string) => {
+	return btoa(String.fromCharCode.apply(null, new Uint8Array(string)))
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "")
+};
+
+const redirectToLogin = async () => {
+	const state = await generateNonce();
+	const codeVerifier = await generateNonce();
+	sessionStorage.setItem(state, codeVerifier);
+	const codeChallenge = base64URLEncode(await sha256(codeVerifier));
+	window.location = `${cognitoLoginUrl}/login?response_type=code&client_id=${clientId}&state=${state}&code_challenge_method=S256&code_challenge=${codeChallenge}&redirect_uri=${window.location.origin}`;
+};
+
 document.querySelector("#loginButton").addEventListener("click", () => {
-	window.location = `${cognitoLoginUrl}/login?response_type=code&client_id=${clientId}&redirect_uri=${window.location.origin}`;
+	redirectToLogin();
 });
 
 const init = async (tokens) => {
@@ -107,21 +133,29 @@ const init = async (tokens) => {
 	await doRefreshStatus();
 };
 
-const hasCode = window.location.search.split("?")[1]?.split("&").find((a) => a.split("=")[0] === "code");
-if (hasCode !== undefined) {
+const searchParams = new URL(location).searchParams;
+
+if (searchParams.get("code") !== null) {
 	window.history.replaceState({}, document.title, "/");
+	const state = searchParams.get("state");
+	const codeVerifier = sessionStorage.getItem(state);
+	sessionStorage.removeItem(state);
+	if (codeVerifier === null) {
+		throw new Error("Unexpected code");
+	}
 	const res = await fetch(`${cognitoLoginUrl}/oauth2/token`, {
 		method: "POST",
 		headers: new Headers({"content-type": "application/x-www-form-urlencoded"}),
 		body: Object.entries({
 			"grant_type": "authorization_code",
 			"client_id": clientId,
+			"code": searchParams.get("code"),
+			"code_verifier": codeVerifier,
 			"redirect_uri": window.location.origin,
-			"code": hasCode.split("=")[1],
 		}).map(([k, v]) => `${k}=${v}`).join("&"),
 	});
 	if (!res.ok) {
-		throw new Error(res);
+		throw new Error(await res.json());
 	}
 	const tokens = await res.json();
 	localStorage.setItem("tokens", JSON.stringify(tokens));
@@ -132,6 +166,6 @@ if (hasCode !== undefined) {
 		const tokens = JSON.parse(localStorage.getItem("tokens"));
 		init(tokens);
 	}else {
-		window.location = `${cognitoLoginUrl}/login?response_type=code&client_id=${clientId}&redirect_uri=${window.location.origin}`;
+		redirectToLogin();
 	}
 }
