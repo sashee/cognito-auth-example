@@ -21,7 +21,7 @@ const base64URLEncode = (string) => {
 const redirectToLogin = async () => {
 	const state = await generateNonce();
 	const codeVerifier = await generateNonce();
-	sessionStorage.setItem(state, codeVerifier);
+	sessionStorage.setItem(`codeVerifier-${state}`, codeVerifier);
 	const codeChallenge = base64URLEncode(await sha256(codeVerifier));
 	window.location = `${cognitoLoginUrl}/login?response_type=code&client_id=${clientId}&state=${state}&code_challenge_method=S256&code_challenge=${codeChallenge}&redirect_uri=${window.location.origin}`;
 };
@@ -138,8 +138,8 @@ const searchParams = new URL(location).searchParams;
 if (searchParams.get("code") !== null) {
 	window.history.replaceState({}, document.title, "/");
 	const state = searchParams.get("state");
-	const codeVerifier = sessionStorage.getItem(state);
-	sessionStorage.removeItem(state);
+	const codeVerifier = sessionStorage.getItem(`codeVerifier-${state}`);
+	sessionStorage.removeItem(`codeVerifier-${state}`);
 	if (codeVerifier === null) {
 		throw new Error("Unexpected code");
 	}
